@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrated DApp</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #f6851b;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #e2761b;
+        }
+        .wallet-address {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            word-break: break-all;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 5px;
+            width: 300px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Integrated DApp</h1>
+        <div>
+            <button id="connectWallet" onclick="connectWallet()">Connect Wallet</button>
+            <div class="wallet-address" id="walletAddress"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Word Extraction & Transaction</h2>
+        <div>
+            <input type="text" id="userInput" placeholder="Type something here..." />
+            <button id="extractWordButton" onclick="signAndCombineAndSendTx()">Extract & Send Tx</button>
+        </div>
+        <div id="result" class="status"></div>
+    </div>
+
+    <script>
+        let provider;
+        let signer;
+        let userAddress;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAddress = accounts[0];
+                    
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    
+                    document.getElementById('walletAddress').textContent = `Connected Wallet: ${userAddress}`;
+                    
+                    window.ethereum.on('chainChanged', () => {
+                        window.location.reload();
+                    });
+                    
+                    window.ethereum.on('accountsChanged', (accounts) => {
+                        if (accounts.length === 0) {
+                            document.getElementById('walletAddress').textContent = 'Wallet disconnected';
+                        } else {
+                            userAddress = accounts[0];
+                            document.getElementById('walletAddress').textContent = `Connected Wallet: ${userAddress}`;
+                        }
+                    });
+                    
+                } catch (error) {
+                    console.error('User rejected the connection', error);
+                    document.getElementById('walletAddress').textContent = 'Failed to connect wallet.';
+                }
+            } else {
+                alert('MetaMask is not installed. Please install MetaMask to use this DApp.');
+            }
+        }
+
+        function extractLastWord() {
+            const input = document.getElementById('userInput').value.trim();
+            return input.split(' ').filter(word => word).pop();
+        }
+
+        async function signAndCombineAndSendTx() {
+            const resultDiv = document.getElementById('result');
+            const lastWord = extractLastWord();
+            
+            if (!lastWord) {
+                resultDiv.className = 'status error';
+                resultDiv.textContent = 'Please enter a valid input.';
+                return;
+            }
+            
+            try {
+                const messageHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(lastWord));
+                const signature = await signer.signMessage(ethers.utils.arrayify(messageHash));
+                
+                const tx = {
+                    to: userAddress, 
+                    value: ethers.utils.parseEther('0.001'), 
+                    gasLimit: 21000,
+                    nonce: await provider.getTransactionCount(userAddress),
+                    chainId: (await provider.getNetwork()).chainId,
+                };
+
+                const signedTx = await signer.sendTransaction(tx);
+
+                resultDiv.className = 'status success';
+                resultDiv.textContent = `Last word: "${lastWord}", Transaction Hash: ${signedTx.hash}`;
+            } catch (error) {
+                console.error(error);
+                resultDiv.className = 'status error';
+                resultDiv.textContent = 'Failed to sign or send the transaction.';
+            }
+        }
+    </script>
+</body>
+</html>
